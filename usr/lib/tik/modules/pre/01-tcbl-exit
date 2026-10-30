@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: MIT
+# TCBL: when the installer is cancelled or fails, return to the login screen
+# instead of powering off, since the USB may also be in use as a live system.
+# Redefines cleanup() from /usr/bin/tik: tik runs it from its EXIT trap, which
+# looks the function up when it fires, so this definition replaces upstream's.
+# Upstream's failure branch shows a second "Installation Failed" dialog and
+# powers off; error() has already shown the specific error by then, and a
+# cancel has already been confirmed. Lines marked TCBL differ from upstream;
+# re-sync the rest if tik's cleanup() changes.
+cleanup() {
+    retval=$?
+    log "[STOP][${retval}] $0"
+    if [ "${debug}" == "1" ]; then
+        d --timeout 5 --info --no-wrap --text="<b>Test Succeeded:</b>\n\nHave a nice day!"
+    elif [ "${retval}" == "0" ]; then
+        d --timeout 5 --info --no-wrap --title="Installation Complete!" --text="${TIK_OS_NAME} has been installed.\n\n<b>System is rebooting</b>"
+        prun systemctl reboot --force
+    else
+        tik_cleanup_mounts                     # TCBL: release the target disk so a retry works
+        cp -a ${tik_log} /ignition
+        loginctl terminate-user "$(id -un)"    # TCBL: back to the login screen, not poweroff
+    fi
+}

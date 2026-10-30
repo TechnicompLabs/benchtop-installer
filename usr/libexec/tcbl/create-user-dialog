@@ -1,0 +1,47 @@
+#!/bin/bash
+# SPDX-License-Identifier: MIT
+# TCBL live USB: the "Create User" session. Asks for the new account's details,
+# creates it through /usr/libexec/tcbl/create-user, then logs out so the new
+# account can be chosen on the login screen. Cancelling also logs out.
+title="Create User"
+
+end_session() {
+	gnome-session-quit --logout --no-prompt || loginctl terminate-user "$(id -un)"
+	exit 0
+}
+
+while true; do
+	form=$(zenity --forms --title="${title}" --width=440 \
+		--text="Create an account for using Technicomp Benchtop Linux from this USB drive. Any system installed from this drive will include it." \
+		--separator=$'\n' \
+		--add-entry="Full name" --add-entry="Username" \
+		--add-password="Password" --add-password="Confirm password") || end_session
+	mapfile -t field <<< "${form}"
+	fullname=${field[0]:-}
+	username=${field[1]:-}
+	password=${field[2]:-}
+	confirm=${field[3]:-}
+
+	problem=""
+	if [ -z "${fullname}" ] || [[ "${fullname}" == *:* ]]; then
+		problem="Enter a full name. It cannot contain a colon."
+	elif ! [[ "${username}" =~ ^[a-z][a-z0-9_-]{0,31}$ ]]; then
+		problem="Enter a username of up to 32 characters: lowercase letters, digits, hyphens and underscores, starting with a letter."
+	elif getent passwd "${username}" > /dev/null; then
+		problem="The username ${username} is already in use."
+	elif [ -z "${password}" ]; then
+		problem="Enter a password."
+	elif [ "${password}" != "${confirm}" ]; then
+		problem="The passwords do not match."
+	fi
+	if [ -n "${problem}" ]; then
+		zenity --error --no-markup --title="${title}" --text="${problem}"
+		continue
+	fi
+
+	if printf '%s\n%s\n%s\n' "${username}" "${fullname}" "${password}" | sudo -n /usr/libexec/tcbl/create-user; then
+		zenity --info --no-markup --title="${title}" --text="The account for ${fullname} is ready. Choose it on the login screen to start using it."
+		end_session
+	fi
+	zenity --error --no-markup --title="${title}" --text="The account could not be created."
+done

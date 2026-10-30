@@ -1,0 +1,97 @@
+# SPDX-License-Identifier: MIT
+# TCBL: install the optional package sets chosen in the pre module
+# 20-tcbl-package-sets (/etc/tik/modules/pre). Runs before 15-encrypt, so the
+# boot entries, initrd and TPM policy that 15-encrypt creates cover the final
+# system.
+#
+# transactional-update cannot install into another disk: it rejects --root,
+# tukit has no option for another root, and in tik's chroot tukit would reach
+# the USB's own snapper through the D-Bus socket in the bind-mounted /run.
+# Instead, this installs into the new system's first snapshot before that
+# system has ever booted, the way the image build installs packages: the
+# snapshot is made writable, zypper installs into it with --root (as
+# transactional-update runs zypper into its new snapshot), and the snapshot is
+# made read-only again. Packages are downloaded first, so a lost connection
+# leaves the snapshot unchanged. Recommended packages stay out, as in the
+# image.
+
+# Reads zypper's output: logs each line and shows it in tik's progress
+# dialog, mapping zypper's (n/N) counter onto module percentages $1 to $2.
+# tik's own log lines (from prun-opt) go straight to the log.
+tcbl_sets_progress() {
+    local from=$1 to=$2 line percent=$1
+    while IFS= read -r line; do
+        if [[ "${line}" == "["*"][LOG] "* ]]; then
+            echo "${line}" >&2
+            continue
+        fi
+        log "[tcbl-package-sets] ${line}"
+        if [[ "${line}" =~ \(\ *([0-9]+)/([0-9]+)\) ]] && [ "${BASH_REMATCH[2]}" -gt 0 ]; then
+            percent=$(( from + (to - from) * BASH_REMATCH[1] / BASH_REMATCH[2] ))
+        fi
+        line="${line//[<>&]/}"
+        tik_progress_step "${line:0:100}" "${percent}"
+    done
+}
+
+# Runs zypper on the new system with its output in tik's progress dialog,
+# between module percentages $1 and $2. Sets retval to zypper's exit code.
+tcbl_sets_zypper() {
+    local from=$1 to=$2 fifo reader
+    shift 2
+    fifo="$(mktemp -u /tmp/tcbl-package-sets-fifo.XXXXXXXXXX)"
+    mkfifo "${fifo}"
+    tcbl_sets_progress "${from}" "${to}" < "${fifo}" &
+    reader=$!
+    retval=0
+    prun-opt /usr/bin/env ZYPP_LOCK_TIMEOUT=300 /usr/bin/zypper --root "${TIK_ROOT_MNT}" --non-interactive "$@" > "${fifo}" 2>&1
+    wait "${reader}"
+    rm -f "${fifo}"
+}
+
+if [ -n "${tcbl_package_sets}" ]; then
+    read -r -a tcbl_sets <<< "${tcbl_package_sets}"
+    tik_target_mount "" "required"
+    tik_progress_step "Preparing the optional software" 0
+    log "[tcbl-package-sets] making the first snapshot writable to install ${tcbl_package_sets}"
+    prun /usr/sbin/btrfs property set -t subvol "${TIK_ROOT_MNT}" ro false
+
+    tcbl_sets_status=""
+    while [ -z "${tcbl_sets_status}" ]; do
+        tcbl_sets_zypper 0 50 install --download-only --no-recommends --auto-agree-with-licenses "${tcbl_sets[@]}"
+        if [ "${retval}" = "0" ]; then
+            tcbl_sets_status="downloaded"
+        else
+            log "[tcbl-package-sets] download failed (${retval})"
+            if ! d_opt --question --no-wrap --title="Optional Software" --ok-label="Try Again" --cancel-label="Continue Without It" \
+                --text="The optional software could not be downloaded.\n\nCheck the network connection and try again, or continue without it. It can be installed later with\n<tt>sudo transactional-update pkg install ${tcbl_package_sets}</tt>"; then
+                tcbl_sets_status="skipped"
+            fi
+        fi
+    done
+
+    if [ "${tcbl_sets_status}" = "downloaded" ]; then
+        tcbl_sets_zypper 50 95 install --no-recommends --auto-agree-with-licenses "${tcbl_sets[@]}"
+        case "${retval}" in
+            # 102 and 103: a reboot or restart is advised; 107: a package
+            # script failed, but the packages are installed
+            0|102|103|107)
+                tcbl_sets_status="installed"
+                ;;
+            *)
+                tcbl_sets_status="failed"
+                ;;
+        esac
+    fi
+
+    # Remove the downloaded packages from the new system's cache
+    tcbl_sets_zypper 95 95 clean
+    prun /usr/sbin/btrfs property set -t subvol "${TIK_ROOT_MNT}" ro true
+    log "[tcbl-package-sets] ${tcbl_sets_status}: ${tcbl_package_sets}"
+
+    if [ "${tcbl_sets_status}" = "failed" ]; then
+        d --warning --no-wrap --title="Optional Software" \
+            --text="The optional software could not be installed completely.\n\nIt can be installed later with\n<tt>sudo transactional-update pkg install ${tcbl_package_sets}</tt>"
+    fi
+    tik_progress_step "Optional software finished" 100
+fi

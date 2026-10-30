@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: MIT
+# TCBL: have the installed system give every file the SELinux label its policy
+# assigns, at its first boot. The installer copies the running USB's files and
+# their labels, including what the live session created (on one test system,
+# /var/log/tuned with the wrong type, which kept tuned-ppd from starting), and
+# 14-tcbl-package-sets installs with the USB's policy loaded rather than the
+# new system's, so packages that add policy modules (Cockpit, swtpm) get
+# generic labels. /etc/selinux/.autorelabel is openSUSE's request for a
+# relabel: selinux-autorelabel (required by microos-tools) relabels the root
+# snapshot, /etc and /var in the initrd and the other file systems before
+# local-fs.target, then removes the file. An empty file relabels types only,
+# keeping labels that are set on purpose, such as those of containers.
+tik_target_mount "" "required"
+if [ -e "${TIK_ROOT_MNT}/etc/selinux/config" ]; then
+    log "[tcbl-autorelabel] the installed system relabels itself at its first boot"
+    prun /usr/bin/touch "${TIK_ROOT_MNT}/etc/selinux/.autorelabel"
+fi

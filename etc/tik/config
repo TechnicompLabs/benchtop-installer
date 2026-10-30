@@ -1,0 +1,12 @@
+# Technicomp Benchtop Linux tik configuration
+TIK_OS_NAME="Technicomp Benchtop Linux"
+# Upstream default is https://aeondesktop.org/reportbug; tik reads
+# /usr/lib/tik/config first and this file second, so this wins.
+TIK_BUG_URL="https://github.com/TechnicompLabs/benchtop-image/issues"
+# USB devices are filtered out of the install-target list by default.
+# Name of the unlocked root device (/dev/mapper/benchtop_root, /etc/crypttab).
+# Without it, tik derives the name from TIK_OS_NAME, as
+# technicomp_benchtop_linux_root. The root partition carries the same name as
+# its label (repart.d/50-root.conf below), so the text password prompt at boot
+# names the disk once, as benchtop_root.
+TIK_CRYPT_MAPPER="benchtop_root"

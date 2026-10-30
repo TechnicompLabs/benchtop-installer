@@ -1,0 +1,31 @@
+#!/bin/bash
+# SPDX-License-Identifier: MIT
+# TCBL live USB: create an administrator account for the "Create User" session,
+# then hide "Create User" from the login screen. Runs as root via sudo (see
+# /etc/sudoers.d/52-tcbl-newuser). Reads three lines on stdin: username, full
+# name, password. Exit status: 0 created, 2 invalid input, 3 username in use.
+set -euo pipefail
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+
+IFS= read -r username
+IFS= read -r fullname
+IFS= read -r password || [ -n "${password}" ]
+
+[[ "${username}" =~ ^[a-z][a-z0-9_-]{0,31}$ ]] || exit 2
+[[ -n "${fullname}" && ${#fullname} -le 128 && "${fullname}" != *[:[:cntrl:]]* ]] || exit 2
+[ -n "${password}" ] || exit 2
+if getent passwd "${username}" > /dev/null; then
+	exit 3
+fi
+
+accounts=(org.freedesktop.Accounts /org/freedesktop/Accounts org.freedesktop.Accounts)
+
+# Create the account the way GNOME Settings and GNOME Initial Setup do: through
+# AccountsService, as an administrator (account type 1).
+busctl call "${accounts[@]}" CreateUser ssi "${username}" "${fullname}" 1 > /dev/null
+printf '%s:%s\n' "${username}" "${password}" | chpasswd
+
+# Hide "Create User": lock tcbl-newuser through AccountsService. GNOME's login
+# screen drops locked accounts from its list, including while it is running.
+read -r _ path < <(busctl call "${accounts[@]}" FindUserByName s tcbl-newuser)
+busctl call org.freedesktop.Accounts "${path//\"/}" org.freedesktop.Accounts.User SetLocked b true

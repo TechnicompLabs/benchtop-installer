@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: MIT
+# TCBL: ask for the installed system's host name, which the post module
+# 18-tcbl-hostname writes to /etc/hostname. That makes it the static host
+# name, so NetworkManager does not replace it with a name from DHCP. A host
+# name here is one label: letters, digits and hyphens, up to 63 characters,
+# not starting or ending with a hyphen, stored in lowercase. The console
+# (cenity) entry has no default text, so there the name has to be typed.
+tcbl_hostname=""
+while true; do
+    d --entry --title="Computer Name" --width=500 --entry-text="benchtop" \
+        --text="Choose a name for this computer. It identifies the computer on the network.\n\nUse letters, digits and hyphens, up to 63 characters."
+    tcbl_hostname="${result,,}"
+    if [[ "${tcbl_hostname}" =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$ ]] && [ "${tcbl_hostname}" != "localhost" ]; then
+        log "[tcbl-hostname] chosen: ${tcbl_hostname}"
+        break
+    fi
+    log "[tcbl-hostname] rejected: ${result}"
+    d --warning --no-wrap --title="Computer Name" \
+        --text="<b>${result//[<>&]/}</b> cannot be used as a computer name.\n\nUse letters, digits and hyphens, up to 63 characters, not starting or ending with a hyphen."
+done

@@ -1,0 +1,29 @@
+# SPDX-License-Identifier: MIT
+# TCBL: remove the live USB's login-screen setup from the installed system.
+# 10-sicu removes the tik account; this removes the "Create User" account, its
+# sudo rule, the passwordless GDM login rule and both accounts' AccountsService
+# records. Accounts made with "Create User" are kept. It also removes the live
+# session's log files, which the installer copies with /var (its caches and
+# journal are not copied; see ExcludeFiles in repart.d/50-root.conf). Log
+# directories are kept, since packages own them, and so is
+# /var/log/zypp/history, which records the optional sets that
+# 14-tcbl-package-sets installed.
+tik_target_mount "" "required"
+tik_progress_step "Removing live USB accounts" 0
+log "[tcbl-live-cleanup] removing tcbl-newuser, its sudo rule and the passwordless GDM rule"
+prun /usr/bin/chroot "${TIK_ROOT_MNT}" userdel -r tcbl-newuser
+prun /usr/bin/rm -f "${TIK_ROOT_MNT}/etc/sudoers.d/52-tcbl-newuser" \
+    "${TIK_ROOT_MNT}/var/lib/AccountsService/users/tik" \
+    "${TIK_ROOT_MNT}/var/lib/AccountsService/users/tcbl-newuser" \
+    "${TIK_ROOT_MNT}/var/lib/AccountsService/icons/tik" \
+    "${TIK_ROOT_MNT}/var/lib/AccountsService/icons/tcbl-newuser"
+# config.sh made /etc/pam.d/gdm-password as a copy of the packaged
+# /usr/lib/pam.d/gdm-password plus the rule, so deleting the copy restores the
+# packaged file. Only delete it if it is TCBL's copy.
+prun-opt /usr/bin/grep -q 'user in tik:tcbl-newuser' "${TIK_ROOT_MNT}/etc/pam.d/gdm-password"
+if [ "${retval}" = "0" ]; then
+    prun /usr/bin/rm -f "${TIK_ROOT_MNT}/etc/pam.d/gdm-password"
+fi
+log "[tcbl-live-cleanup] removing the live session's log files"
+prun /usr/bin/find "${TIK_ROOT_MNT}/var/log" -xdev -type f ! -path "${TIK_ROOT_MNT}/var/log/zypp/history" -delete
+tik_progress_step "Live USB accounts removed" 100

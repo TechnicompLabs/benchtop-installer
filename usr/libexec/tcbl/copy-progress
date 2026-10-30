@@ -1,0 +1,40 @@
+#!/bin/bash
+# SPDX-License-Identifier: MIT
+total="$(cat /usr/share/tcbl/copy-bytes 2>/dev/null)"
+[[ "${total}" =~ ^[0-9]+$ ]] && [ "${total}" -gt 0 ] || total=0
+start=${SECONDS}
+
+gb() { awk -v b="$1" 'BEGIN { printf "%.1f GB", b / 1e9 }'; }
+elapsed() { local s=$(( SECONDS - start )); printf '%d:%02d' $(( s / 60 )) $(( s % 60 )); }
+
+# Wait for mkfs.btrfs, as long as systemd-repart is running
+pid=""
+while [ -z "${pid}" ]; do
+    pgrep -x systemd-repart > /dev/null || { echo 100; exit 0; }
+    pid="$(pgrep -n -x mkfs.btrfs)" && break
+    echo "# Preparing the disk ($(elapsed))"
+    sleep 2
+done
+
+# Follow the bytes it reads
+while [ -r "/proc/${pid}/io" ]; do
+    read_bytes="$(awk '/^rchar:/ { print $2 }' "/proc/${pid}/io" 2>/dev/null)"
+    [ -n "${read_bytes}" ] || break
+    if [ "${total}" -gt 0 ]; then
+        percent=$(( read_bytes * 100 / total ))
+        [ "${percent}" -gt 99 ] && percent=99
+        echo "${percent}"
+        echo "# Copying the system: $(gb "${read_bytes}") of about $(gb "${total}") ($(elapsed))"
+    else
+        echo "# Copying the system: $(gb "${read_bytes}") ($(elapsed))"
+    fi
+    sleep 2
+done
+
+# Until systemd-repart has finished
+while pgrep -x systemd-repart > /dev/null; do
+    echo 99
+    echo "# Finishing the disk ($(elapsed))"
+    sleep 2
+done
+echo 100

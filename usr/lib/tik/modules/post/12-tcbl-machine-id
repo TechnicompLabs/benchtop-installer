@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: MIT
+# TCBL: give the installed system its own identity. The installer copies /etc
+# and /var from the running USB, so every system installed from one USB would
+# otherwise share the USB's machine ID. Resets the same per-machine files that
+# config.sh deletes at image build time. Runs after 10-sicu (target mounted)
+# and before 15-encrypt, so the initrd built there carries the new machine ID.
+# Boot entries are unaffected: sdbootutil names them from
+# /etc/kernel/entry-token (the OS ID), not from the machine ID.
+tik_target_mount "" "required"
+tik_progress_step "Generating a machine ID" 0
+new_machine_id="$(systemd-id128 new)"
+[[ "${new_machine_id}" =~ ^[0-9a-f]{32}$ ]] || error "Could not generate a machine ID"
+log "[tcbl-machine-id] writing a new machine ID; clearing the random seed and zypp ID"
+prun /usr/bin/tee "${TIK_ROOT_MNT}/etc/machine-id" <<< "${new_machine_id}" > /dev/null
+prun /usr/bin/rm -f "${TIK_ROOT_MNT}/var/lib/systemd/random-seed" "${TIK_ROOT_MNT}/var/lib/zypp/AnonymousUniqueId"
+tik_progress_step "Machine ID generated" 100

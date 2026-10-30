@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: MIT
+# TCBL: write the host name chosen in the pre module 22-tcbl-hostname to the
+# installed system.
+if [ -n "${tcbl_hostname}" ]; then
+    tik_target_mount "" "required"
+    tik_progress_step "Setting the computer name" 0
+    log "[tcbl-hostname] writing /etc/hostname: ${tcbl_hostname}"
+    prun /usr/bin/tee "${TIK_ROOT_MNT}/etc/hostname" <<< "${tcbl_hostname}" > /dev/null
+    tik_progress_step "Computer name set" 100
+fi

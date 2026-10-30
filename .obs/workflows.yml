@@ -1,0 +1,10 @@
+rebuild_on_push:
+  steps:
+    - trigger_services:
+        project: home:technicomp:benchtop
+        package: tik-config-benchtop
+  filters:
+    event: push
+    branches:
+      only:
+        - main
