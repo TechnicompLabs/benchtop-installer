@@ -6,7 +6,8 @@
 # Upstream's failure branch shows a second "Installation Failed" dialog and
 # powers off; error() has already shown the specific error by then, and a
 # cancel has already been confirmed. Lines marked TCBL differ from upstream;
-# re-sync the rest if tik's cleanup() changes.
+# re-sync the rest if tik's cleanup() changes; the package's build stops when
+# it does.
 cleanup() {
     retval=$?
     log "[STOP][${retval}] $0"

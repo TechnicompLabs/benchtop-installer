@@ -1,24 +1,13 @@
 # SPDX-License-Identifier: MIT
-# TCBL: start the self-deploy from a blank, settled disk.
+# TCBL: changes to the self-deploy step, which follows tik's "erase the disk?"
+# confirmation.
 #
-# On a disk that still holds partitions from a previous install, systemd-repart
-# fails with "Failed to create new partition '<disk>p1': Device or resource
-# busy": after repart wipes the old table, the kernel still has the old
-# partitions registered for a moment while udev re-reads the disk. A blank disk
-# never hits this.
+# tik has no hook there, so this redefines dump_image_repart_self from
+# tik-core-helper (tik loads its helpers before modules, so this definition
+# wins). It is upstream's function plus the lines marked TCBL. Re-sync if a tik
+# update changes that function; the package's build stops when it does.
 #
-# So before repart runs, wipefs erases the old partition table and has the
-# kernel re-read it (util-linux retries that re-read itself when udev briefly
-# holds the disk), and udevadm settle waits for udev to finish. repart then
-# starts from the same state as a freshly wiped disk and runs once, unchanged.
-#
-# tik has no hook between its "erase the disk?" confirmation and repart, so this
-# redefines dump_image_repart_self from tik-core-helper (tik loads its helpers
-# before modules, so this definition wins). It is upstream's function plus the
-# lines marked TCBL. Re-sync if a tik update changes that function.
-#
-# TCBL, in the same function because it is the step that follows the "erase
-# the disk?" confirmation:
+# The TCBL lines:
 # - mkfs.btrfs runs without its own discard. With --empty=force,
 #   systemd-repart has already discarded the whole disk, but it still has
 #   mkfs.btrfs discard the new, encrypted root again (its "discard only once"
@@ -36,8 +25,6 @@ dump_image_repart_self() {
     create_keyfile
     prun-opt rm -rf /etc/fstab.repart
     log "[dump_image_repart_self] self-deploying"
-    prun /usr/sbin/wipefs --all "${image_target}"    # TCBL
-    prun-opt udevadm settle --timeout=30             # TCBL
     tcbl_show_details                                # TCBL
     tcbl_copy_progress_start                         # TCBL
     prun /usr/bin/env SYSTEMD_REPART_MKFS_OPTIONS_BTRFS=--nodiscard systemd-repart --no-pager --pretty=0 --empty=force --dry-run=no --key-file="${tik_keyfile}" --generate-fstab=/etc/fstab.repart "${image_target}" 1>&2    # TCBL: mkfs.btrfs option, output to the log

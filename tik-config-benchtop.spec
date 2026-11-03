@@ -11,8 +11,8 @@ Name:           tik-config-benchtop
 Version:        0.1.0
 Release:        0
 Summary:        Technicomp Benchtop Linux configuration and modules for tik
-# MIT; pre/15-encrypt and post/15-encrypt are tik's modules (MIT, SUSE LLC and
-# Richard Brown), the second with one TCBL change
+# MIT; 90-tcbl-repart-prep and 01-tcbl-exit carry functions from tik (MIT,
+# SUSE LLC and Richard Brown) with TCBL changes
 License:        MIT
 URL:            https://github.com/TechnicompLabs/benchtop-installer
 BuildArch:      noarch
@@ -21,14 +21,14 @@ Provides:       tik-config
 Conflicts:      tik-config
 # tik's own modules, unchanged
 Requires:       tik
+Requires:       tik-module-encrypt
 Requires:       tik-module-setup-gnome-env
 Requires:       tik-module-sicu
 Requires:       tik-module-welcome
-# this package carries both encryption modules, the post-install one with a
-# TCBL change, in place of tik-module-encrypt
-Conflicts:      tik-module-encrypt
-# the encryption modules: TPM detection and enrollment, the recovery key's QR
-# code, the Secure Boot state; 10-welcome: the AC power check
+# the target disk's layout is a changed copy of Aeon's, at the same paths
+Conflicts:      systemd-repart-branding-Aeon
+# tools tik's modules use: TPM detection and enrollment, the recovery key's QR
+# code, the Secure Boot state (15-encrypt); the AC power check (10-welcome)
 Requires:       mokutil
 Requires:       qrencode
 Requires:       tpm2.0-tools
@@ -40,6 +40,9 @@ Requires:       procps
 Requires:       zypper
 # /usr/lib/tik/config is tik-config-generic's, copied at build time
 BuildRequires:  tik-config-generic
+# %%check: the upstream originals of what this package changes
+BuildRequires:  systemd-repart-branding-Aeon
+BuildRequires:  tik
 
 %description
 The configuration and modules of tik for the Technicomp Benchtop Linux
@@ -80,6 +83,28 @@ install -D -m 0644 %{_prefix}/lib/tik/config %{buildroot}%{_prefix}/lib/tik/conf
 # the image measures the size of the copy into this directory
 install -d %{buildroot}%{_datadir}/tcbl
 
+%check
+# This package replaces two of tik's functions with changed copies
+# (dump_image_repart_self in 90-tcbl-repart-prep, cleanup in 01-tcbl-exit) and
+# Aeon's disk layout (systemd-repart-branding-Aeon) with a changed copy. Stop
+# the build when one of those originals changes upstream, so that the copy is
+# re-synced instead of silently replacing the new version. OBS rebuilds this
+# package when tik or systemd-repart-branding-Aeon changes. After re-syncing,
+# record the new checksum here.
+fn() { awk -v start="$1() {" '$0 == start {f=1} f {print} f && /^}/ {exit}' "$2"; }
+check() {
+    local what=$1 expected=$2 actual
+    actual=$(sha256sum | cut -d' ' -f1)
+    if [ "$actual" != "$expected" ]; then
+        echo "ERROR: $what changed upstream; re-sync TCBL's copy and update the checksum in %%check" >&2
+        exit 1
+    fi
+}
+fn dump_image_repart_self %{_prefix}/lib/tik/lib/tik-core-helper | check "tik's dump_image_repart_self (90-tcbl-repart-prep)" 4c68831bf9d770067dfd3aa0c07454fbe8b38dff45e2c4261e021b22bd85224f
+fn cleanup %{_bindir}/tik | check "tik's cleanup (01-tcbl-exit)" 07fb788ee85af96189cc2f20f8ecf4c882aa465e52e847af436ab6e098c89f0f
+check "Aeon's 00-esp.conf (usr/lib/repart.d)" 3200090015b3a9fae9c2643ac44d321f6889428abce004fa0f512058f4fb9eed < %{_prefix}/lib/repart.d/00-esp.conf
+check "Aeon's 50-root.conf (usr/lib/repart.d)" 55244ae92c2d83af00dd1aa2c11764c75cf3c35461308b61aaa172dee8b124d1 < %{_prefix}/lib/repart.d/50-root.conf
+
 %files
 %dir %{_defaultlicensedir}/%{name}
 %license %{_defaultlicensedir}/%{name}/tik.LICENSE
@@ -91,11 +116,9 @@ install -d %{buildroot}%{_datadir}/tcbl
 # before /etc/tik/modules/<phase>)
 %{_prefix}/lib/tik/modules/pre/01-tcbl-exit
 %{_prefix}/lib/tik/modules/pre/06-tcbl-wallpaper
-%{_prefix}/lib/tik/modules/pre/15-encrypt
 %{_prefix}/lib/tik/modules/post/12-tcbl-machine-id
 %{_prefix}/lib/tik/modules/post/13-tcbl-no-memtest
 %{_prefix}/lib/tik/modules/post/14-tcbl-package-sets
-%{_prefix}/lib/tik/modules/post/15-encrypt
 # modules with no ordering need
 %dir %{_sysconfdir}/tik/modules
 %dir %{_sysconfdir}/tik/modules/pre
