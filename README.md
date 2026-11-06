@@ -18,6 +18,7 @@ The files are a filesystem tree (`usr/`, `etc/`) that mirrors their install path
   - `pre/20-tcbl-package-sets` - offers the optional package sets and resolves them before the disk is erased
   - `pre/22-tcbl-hostname`, `post/18-tcbl-hostname` - asks for the host name and writes it
   - `pre/90-tcbl-repart-prep` - shows the details window and the copy's progress, and has mkfs.btrfs skip its own discard (systemd-repart has already discarded the disk)
+  - `post/16-tcbl-passphrase` - with the TPM in use, offers a disk password of the user's own, alongside the recovery key
   - `post/17-tcbl-live-cleanup` - removes the "Create User" account, its sudo rule, the passwordless GDM rule and the live session's log files from the installed system
   - `post/19-tcbl-autorelabel` - the installed system relabels its files for SELinux at its first boot
 - `usr/libexec/tcbl/` - `copy-progress`, which reports the copy's progress from the bytes mkfs.btrfs has read against the size the image records in `/usr/share/tcbl/copy-bytes`; `create-user` and `create-user-dialog`, the live USB's "Create User" session

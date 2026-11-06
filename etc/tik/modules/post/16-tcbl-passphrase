@@ -1,0 +1,53 @@
+# SPDX-License-Identifier: MIT
+# TCBL: in TPM mode, offer the user a disk password of their own as well. tik's
+# 15-encrypt asks for a passphrase only when it cannot use the TPM; with the
+# TPM, the disk opens by itself, and the recovery key is the only secret. A
+# password of the user's own opens the disk at the same prompt as the recovery
+# key, for example when the TPM refuses after a firmware or Secure Boot change.
+#
+# Runs after 15-encrypt (tik reads /usr/lib/tik/modules before
+# /etc/tik/modules) and before tik removes its temporary key file, which
+# authorizes the new key slot, as 15-encrypt does for its passphrase.
+tcbl_passphrase() {
+    local crypt_part="${TIK_CRYPT_PART}" pw pw_check
+
+    [ "${tik_encrypt_mode}" == 0 ] || return 0
+    if [ -z "${crypt_part}" ]; then
+        probe_partitions "${TIK_INSTALL_DEVICE}" "crypto_LUKS"
+        crypt_part="${probedpart}"
+    fi
+    if [ -z "${crypt_part}" ] || [ -z "${tik_keyfile}" ]; then
+        log "[tcbl-passphrase] no encrypted partition or key file, skipping"
+        return 0
+    fi
+
+    d_opt --question --no-wrap --icon=security-high-symbolic --title="Disk Password" \
+        --ok-label="Set a Password" --cancel-label="Skip" \
+        --text="This computer's TPM unlocks the disk of ${TIK_OS_NAME} by itself at every start.\n\nYou can also set a password of your own for the disk. It works wherever the recovery key does:\nwhen the TPM does not unlock the disk, for example after a firmware or Secure Boot change.\n\nThe recovery key keeps working either way." ||
+        { log "[tcbl-passphrase] skipped"; return 0; }
+
+    while true; do
+        logging=false
+        d_opt --password --title="Disk Password"
+        pw="${result}"
+        d_opt --password --title="Type the Disk Password Again"
+        pw_check="${result}"
+        logging=true
+
+        # both dialogs cancelled or left empty: no password
+        if [ -z "${pw}" ] && [ -z "${pw_check}" ]; then
+            log "[tcbl-passphrase] no password set"
+            return 0
+        fi
+        if [ "${pw}" != "${pw_check}" ]; then
+            d --warning --no-wrap --title="The passwords did not match" --text="Please try again."
+            continue
+        fi
+
+        prun /usr/sbin/cryptsetup luksAddKey --key-file="${tik_keyfile}" --batch-mode --force-password "${crypt_part}" <<<"${pw}"
+        log "[tcbl-passphrase] password added"
+        return 0
+    done
+}
+
+tcbl_passphrase

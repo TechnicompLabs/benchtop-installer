@@ -51,6 +51,7 @@ self-installing USB image: the target disk's layout for systemd-repart
 progress during installation, the optional package sets, the host name,
 removal of the live USB's accounts and log files from the installed system, an
 SELinux relabel at its first boot, its own machine ID, no memtest86+ entry,
+an optional disk password of the user's own when the TPM unlocks the disk,
 and a return to the login screen when the installer is cancelled. It also
 carries the live USB's "Create User" helpers.
 
@@ -126,6 +127,7 @@ check "Aeon's 50-root.conf (usr/lib/repart.d)" 55244ae92c2d83af00dd1aa2c11764c75
 %config %{_sysconfdir}/tik/modules/pre/20-tcbl-package-sets
 %config %{_sysconfdir}/tik/modules/pre/22-tcbl-hostname
 %config %{_sysconfdir}/tik/modules/pre/90-tcbl-repart-prep
+%config %{_sysconfdir}/tik/modules/post/16-tcbl-passphrase
 %config %{_sysconfdir}/tik/modules/post/17-tcbl-live-cleanup
 %config %{_sysconfdir}/tik/modules/post/18-tcbl-hostname
 %config %{_sysconfdir}/tik/modules/post/19-tcbl-autorelabel
